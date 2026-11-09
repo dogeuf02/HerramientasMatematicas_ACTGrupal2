@@ -1,0 +1,92 @@
+Rúbrica de la tarea 13
+Explicación de la relación entre la probabilidad de bloqueo de un sistema y la de espera del otro.
+
+Weight 40%
+
+Sobresaliente
+5 points
+Explica cómo se podría calcular la probabilidad de espera del sistema M/M/k, si se conoce el valor de la probabilidad de bloqueo del sistema M/M/k/k.
+
+
+Bien
+4 points
+Explica cómo se podría calcular la probabilidad de espera del sistema M/M/k, si se conoce el valor de la probabilidad de bloqueo del sistema M/M/k/k, pero comete algunos errores en la explicación.
+
+
+Insuficiente
+2 points
+Presenta la expresión que permite calcular la probabilidad de espera del sistema M/M/k, si se conoce la probabilidad de bloqueo del sistema M/M/k/k, pero no explica cómo se obtuvo la expresión.
+
+
+No existe
+0 points
+No explica la relación.
+
+Codificación de la función en MATLAB
+
+Weight 20%
+
+Sobresaliente
+5 points
+Codifica una función en MATLAB que cumple con todos los requisitos del enunciado.
+
+
+Bien
+4 points
+Codifica una función en MATLAB que cumple con casi todos los requisitos del enunciado.
+
+
+Insuficiente
+2 points
+Codifica un script o una función en MATLAB que no calcula la probabilidad de espera.
+
+
+No existe
+0 points
+No elabora o no presenta el código solicitado.
+
+Verificación de la función en MATLAB
+
+Weight 20%
+
+Sobresaliente
+5 points
+Verifica que la función retorne la probabilidad de espera, cuando se evalúa en A menores que k; y para varios valores enteros positivos de k.
+
+
+Bien
+4 points
+Verifica que la función retorne la probabilidad de espera, cuando se evalúa en A menores que k; y para un solo valor de k, mayor que uno.
+
+
+Insuficiente
+2 points
+Verifica que la función retorne la probabilidad de espera, solo cuando k es igual a uno.
+
+
+No existe
+0 points
+No verifica la función.
+
+Redacta y aplica las reglas de ortografía.
+
+Weight 20%
+
+Sobresaliente
+5 points
+Redacta y aplica las reglas de ortografía sin ninguna falta apreciable.
+
+
+Bien
+4 points
+Redacta y aplica las reglas de ortografía casi a la perfección: el documento presenta menos de cuatro faltas.
+
+
+Insuficiente
+2 points
+Redacta con dificultad y/o el documento presenta más de tres faltas de ortografía.
+
+
+No existe
+0 points
+No hay texto o redacta de tal manera que el texto es imposible de entender.

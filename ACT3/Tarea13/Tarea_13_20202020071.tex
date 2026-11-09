@@ -1,0 +1,212 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage{enumitem}
+\setlist[itemize]{label=-}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+
+\lstset{
+    language=Matlab,
+    backgroundcolor=\color{gray!6},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!50!black}\itshape,
+    stringstyle=\color{purple},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=8pt,
+    frame=single,
+    rulecolor=\color{gray!30},
+    tabsize=4,
+    showspaces=false,
+    showstringspaces=false,
+    breaklines=true,
+    breakatwhitespace=true,
+    literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1 {Ñ}{{\~N}}1
+}
+
+\title{\textbf{Relación entre Erlang B y Erlang C}}
+\author{David Stiven Muñoz Amaya - 20202020071}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Interpretación conceptual}
+
+Los sistemas Erlang B ($M/M/k/k$, con pérdida) y Erlang C ($M/M/k/\infty$, con espera) se comportan de forma idéntica mientras existan servidores libres ($0 \le n < k$), ya que la tasa de llegada es $\lambda$ y la de servicio es $n\mu$. Por ello, ambos comparten los mismos términos proporcionales $\frac{A^n}{n!}$, donde $A = \frac{\lambda}{\mu}$ es el tráfico ofrecido.
+
+La diferencia ocurre al alcanzar el límite de $k$ servidores ocupados:
+\begin{itemize}
+    \item \textbf{En Erlang B:} El sistema se trunca en $n = k$. Todo cliente que llega cuando $N = k$ es bloqueado y se pierde.
+    \item \textbf{En Erlang C:} Si llegan más clientes ($n \ge k$), forman una fila infinita atendida a tasa constante $k\mu$. Al sumar las probabilidades de todos los estados de espera ($n \ge k$) mediante una serie geométrica (con $A < k$), aparece el factor de amplificación de la cola $\left(\frac{k}{k - A}\right)$ acompañando al término $\frac{A^k}{k!}$.
+\end{itemize}
+
+\section{Demostración matemática}
+
+Para el sistema Erlang B, la probabilidad de bloqueo $E_{1,k}$ está dada por:
+\[
+E_{1,k} = \frac{\frac{A^k}{k!}}{\sum\limits_{n=0}^{k} \frac{A^n}{n!}}
+\]
+
+Separando el último término ($n = k$) de la sumatoria del denominador e invirtiendo la fracción:
+\[
+\frac{1}{E_{1,k}} = \frac{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!} + \frac{A^k}{k!}}{\frac{A^k}{k!}} = \frac{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!}}{\frac{A^k}{k!}} + 1
+\]
+
+Despejando el término de la sumatoria:
+\begin{equation}
+\frac{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!}}{\frac{A^k}{k!}} = \frac{1}{E_{1,k}} - 1 = \frac{1 - E_{1,k}}{E_{1,k}}
+\end{equation}
+
+Por otro lado, para el sistema Erlang C ($M/M/k/\infty$), la probabilidad de espera se estructura como:
+\[
+E_{2,k} = P[T_w > 0] = \frac{A^k}{k!} \left( \frac{k}{k - A} \right) P_0
+\]
+donde la probabilidad de sistema vacío ($P_0$) viene dada por:
+\[
+P_0 = \left[ \sum\limits_{n=0}^{k-1} \frac{A^n}{n!} + \frac{A^k}{k!} \left( \frac{k}{k - A} \right) \right]^{-1}
+\]
+Al sustituir $P_0$ en la expresión de $E_{2,k}$, se obtiene la ecuación completa de Erlang C:
+\[
+E_{2,k} = \frac{\frac{A^k}{k!} \left(\frac{k}{k - A}\right)}{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!} + \frac{A^k}{k!} \left(\frac{k}{k - A}\right)}
+\]
+
+
+Dividiendo el numerador y el denominador de la expresión de $E_{2,k}$ entre $\frac{A^k}{k!}$:
+\[
+E_{2,k} = \frac{\frac{k}{k - A}}{\frac{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!}}{\frac{A^k}{k!}} + \frac{k}{k - A}}
+\]
+
+Sustituyendo la ecuación (1) en el denominador:
+\[
+E_{2,k} = \frac{\frac{k}{k - A}}{\left(\frac{1 - E_{1,k}}{E_{1,k}}\right) + \frac{k}{k - A}}
+\]
+
+Multiplicando el numerador y el denominador por $E_{1,k}(k - A)$ para simplificar las fracciones:
+\[
+E_{2,k} = \frac{k \cdot E_{1,k}}{(1 - E_{1,k})(k - A) + k \cdot E_{1,k}}
+\]
+
+Expandiendo el producto en el denominador y cancelando los términos $-k \cdot E_{1,k}$ y $+k \cdot E_{1,k}$:
+\[
+\text{Denominador} = k - A - k \cdot E_{1,k} + A \cdot E_{1,k} + k \cdot E_{1,k} = k - A + A \cdot E_{1,k}
+\]
+
+Factorizando $A$ en el denominador, se obtiene finalmente la ecuación de relación directa:
+\[
+\mathbf{E_{2,k} = \frac{k \cdot E_{1,k}}{k - A + A \cdot E_{1,k}} = \frac{k \cdot E_{1,k}}{k - A(1 - E_{1,k})}}
+\]
+
+Donde:
+\begin{itemize}
+    \item $E_{1,k}$: Probabilidad de bloqueo en Erlang B.
+    \item $k$: Número de servidores ($k \in \mathbb{Z}^+$).
+    \item $A$: Intensidad de tráfico ofrecido $A = \frac{\lambda}{\mu}$ (bajo condición de estabilidad $A < k$).
+\end{itemize}
+
+\section{Implementación en MATLAB}
+
+\subsection{Función base de Erlang B (\texttt{pb.m})}
+
+\begin{lstlisting}
+function p = pb(A, k)
+    p = A ./ (1 + A);
+    for n = 2:k
+        p = A .* p ./ (n + A .* p);
+    end
+end
+\end{lstlisting}
+
+\subsection{Función de Erlang C (\texttt{erlangC.m})}
+
+\begin{lstlisting}
+function E2k = erlangC(A, k)
+    if any(A <= 0 | A >= k)
+        error('A debe ser positivo y menor que k (0 < A < k).') 
+    end
+    if any(k <= 0 | mod(k, 1) ~= 0)
+        error('k debe ser un numero entero positivo.')
+    end
+
+    E1k = pb(A, k);
+
+    E2k = (k .* E1k) ./ (k - (A .* (1 - E1k)));
+end
+\end{lstlisting}
+
+\section{Verificaciones}
+
+\begin{lstlisting}
+A_base = [0.2, 0.5, 0.8];
+k_base = 1;
+
+    for i = 1:length(A_base)
+        P_esp = erlangC(A_base(i), k_base);
+        fprintf('A = %4.1f | k = %3d | P(espera) = %8.4f\n', ...
+                A_base(i), k_base, P_esp);
+    end
+
+
+pruebas = [
+    2.0,   3;
+    2.0,   5;
+    2.0,  10;
+    4.0,   5;
+    4.0,  10;
+    4.0,  20;
+    4.0,  40;
+    4.0, 200
+];
+
+    for i = 1:size(pruebas, 1)
+        A_val = pruebas(i, 1);
+        k_val = pruebas(i, 2);
+        P_esp = erlangC(A_val, k_val);
+        fprintf('A = %4.1f | k = %3d (Cumple A < k) -> P(espera) = %.4e\n', ...
+                A_val, k_val, P_esp);
+    end
+\end{lstlisting}
+
+\clearpage
+\begin{table}[t]
+\centering
+\caption{Resultados de la verificación de la probabilidad de espera para diferentes valores de $A$ y $k$.}
+\label{tab:resultados_verificacion}
+\vspace{0.3em}
+\begin{tabular}{ccccc}
+\toprule
+\textbf{$A$} & \textbf{$k$} & \textbf{Condición $A < k$} & \textbf{$P[T_w > 0]$ (Científica)} & \textbf{$P[T_w > 0]$ (\%)} \\
+\midrule
+0.2 & 1   & Sí ($0.2 < 1$)   & $2.0000 \times 10^{-1}$   & $20.00\%$ \\
+0.5 & 1   & Sí ($0.5 < 1$)   & $5.0000 \times 10^{-1}$   & $50.00\%$ \\
+0.8 & 1   & Sí ($0.8 < 1$)   & $8.0000 \times 10^{-1}$   & $80.00\%$ \\
+\midrule
+2.0 & 3   & Sí ($2 < 3$)    & $4.4444 \times 10^{-1}$   & $44.44\%$ \\
+2.0 & 5   & Sí ($2 < 5$)    & $5.9701 \times 10^{-2}$   & $5.97\%$ \\
+2.0 & 10  & Sí ($2 < 10$)   & $4.7737 \times 10^{-5}$   & $0.0048\%$ \\
+\midrule
+4.0 & 5   & Sí ($4 < 5$)    & $5.5411 \times 10^{-1}$   & $55.41\%$ \\
+4.0 & 10  & Sí ($4 < 10$)   & $8.8147 \times 10^{-3}$   & $0.8815\%$ \\
+4.0 & 20  & Sí ($4 < 20$)   & $1.0347 \times 10^{-8}$   & $\approx 0\%$ \\
+4.0 & 40  & Sí ($4 < 40$)   & $3.0153 \times 10^{-26}$  & $\approx 0\%$ \\
+4.0 & 200 & Sí ($4 < 200$)  & $6.1194 \times 10^{-257}$ & $\approx 0\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
