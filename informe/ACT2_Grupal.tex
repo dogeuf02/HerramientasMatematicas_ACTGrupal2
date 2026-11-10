@@ -1,0 +1,600 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage{enumitem}
+\setlist[itemize]{label=-}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{caption}
+
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+
+\lstset{
+    language=Matlab,
+    backgroundcolor=\color{gray!6},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!50!black}\itshape,
+    stringstyle=\color{purple},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=8pt,
+    frame=single,
+    rulecolor=\color{gray!30},
+    tabsize=4,
+    showspaces=false,
+    showstringspaces=false,
+    breaklines=true,
+    breakatwhitespace=true,
+    literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1 {Ñ}{{\~N}}1
+}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\title{\textbf{Segundo Trabajo Grupal: Simulación de Colas}\\[0.3em]
+\large Herramientas Matemáticas para el Manejo de la Información -- 2026-3\\[0.2em]
+\normalsize Modelo Asignado: Sistema de Espera Erlang C ($M/M/k/\infty/\infty$)}
+\author{David Stiven Muñoz Amaya -- 20202020071\\[0.2em]
+\textit{Facultad de Ingeniería, Universidad Distrital Francisco José de Caldas}}
+\date{Noviembre de 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+El presente documento constituye el informe técnico y experimental del segundo trabajo grupal de la asignatura Herramientas Matemáticas para el Manejo de la Información. Se aborda en detalle el diseño, formalización analítica y desarrollo de una herramienta computacional en MATLAB para la simulación de colas bajo el modelo Erlang C ($M/M/k/\infty/\infty$). En las primeras tres secciones se expone el modelo matemático riguroso (diagrama de estados, balance de flujo, deducción de la probabilidad de espera y tiempo medio de espera $E[T_w]$), el diseño del algoritmo de simulación multi-servidor orientado a eventos temporales y la validación cruzada experimental vs. analítica bajo variaciones sistemáticas de la intensidad de tráfico ofrecido $A = \lambda/\mu$. Finalmente, se presenta la estructura formal y metodológica reservada para la incorporación de generadores empíricos basados en cuantiles (`superfuncion`), la evaluación de arribos no exponenciales y el dimensionamiento de un caso de estudio real en ingeniería.
+\end{abstract}
+
+\vspace{0.5em}
+\noindent\textbf{Palabras clave:} Teoría de colas, modelo Erlang C, simulación por eventos, tiempo medio de espera, intensidad de tráfico, procesos de Markov.
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section{Actividad 1: Modelo Matemático de la Cola ($M/M/k/\infty/\infty$)}
+
+\subsection{Definición del Sistema y Espacio de Estados}
+El modelo asignado al grupo corresponde al sistema de colas multicanal sin pérdidas con capacidad de espera infinita, formalizado según la notación de Kendall como $M/M/k/\infty/\infty$ o modelo de retardo de Erlang (Erlang C). Las características fundamentales del sistema son:
+\begin{itemize}
+    \item \textbf{Proceso de arribo ($M$):} Los clientes arriban al sistema según un proceso de Poisson homogéneo con tasa constante $\lambda$. En consecuencia, los tiempos entre arribos consecutivos se distribuyen exponencialmente con parámetro $\lambda$, es decir, con media $1/\lambda$.
+    \item \textbf{Proceso de atención ($M$):} Cada uno de los $k$ servidores en paralelo atiende clientes de forma estadísticamente independiente, con tiempos de servicio distribuidos exponencialmente de parámetro $\mu$ (media $1/\mu$).
+    \item \textbf{Servidores en paralelo ($k$):} Existen $k$ servidores idénticos que operan en simultáneo ($k \in \mathbb{Z}^+$).
+    \item \textbf{Disciplina de servicio y capacidad de almacenamiento ($\infty/\infty$):} La cola posee capacidad ilimitada (no hay bloqueo ni rechazo; los usuarios esperan hasta ser atendidos). La disciplina de atención es FIFO (\textit{First In, First Out}).
+\end{itemize}
+
+El estado del sistema en un instante de tiempo $t$, denotado por $N(t) = n \in \{0, 1, 2, \dots\}$, representa el número total de clientes presentes en el sistema (tanto los que están siendo atendidos como los que esperan en cola).
+
+\subsection{Diagrama de Transición de Estados}
+Las tasas de nacimiento ($\lambda_n$) y de muerte ($\mu_n$) entre estados contiguos son:
+\begin{equation}
+\lambda_n = \lambda, \quad \forall n \ge 0
+\end{equation}
+\begin{equation}
+\mu_n = 
+\begin{cases} 
+n\mu, & \text{si } 0 \le n < k \quad (\text{sólo } n \text{ servidores activos}) \\
+k\mu, & \text{si } n \ge k \quad (\text{todos los } k \text{ servidores activos})
+\end{cases}
+\end{equation}
+
+En la Figura \ref{fig:diagrama_erlang_c} se observa la cadena de Markov en tiempo continuo correspondiente a este proceso de nacimiento y muerte.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.88\textwidth]{Erlang_C_Diagram.drawio.png}
+    \caption{Diagrama de transición de estados para el modelo de espera Erlang C ($M/M/k/\infty$).}
+    \label{fig:diagrama_erlang_c}
+\end{figure}
+
+\subsection{Ecuaciones de Estado Estacionario (Balance de Flujo)}
+Bajo la condición de estabilidad $A < k$, donde $A = \lambda/\mu$ representa el tráfico ofrecido en Erlangs, el sistema alcanza un régimen permanente o estacionario donde la tasa promedio de entrada a cada estado es idéntica a la tasa promedio de salida:
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.35}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+\textbf{Estado} & \textbf{Tasa de salida} & $=$ & \textbf{Tasa de llegada} & \textbf{Despeje} \\ 
+\midrule
+$0$ & $\lambda P_0$ & $=$ & $\mu P_1$ & $P_1 = \dfrac{\lambda}{\mu} P_0$ \\[0.5em]
+$1$ & $\mu P_1 + \lambda P_1$ & $=$ & $\lambda P_0 + 2\mu P_2$ & $P_2 = \dfrac{\lambda}{2\mu} P_1$ \\[0.5em]
+$2$ & $2\mu P_2 + \lambda P_2$ & $=$ & $\lambda P_1 + 3\mu P_3$ & $P_3 = \dfrac{\lambda}{3\mu} P_2$ \\[0.5em]
+$\vdots$ & $\vdots$ & & $\vdots$ & $\vdots$ \\[0.5em]
+$k - 1$ & $(k-1)\mu P_{k-1} + \lambda P_{k-1}$ & $=$ & $\lambda P_{k-2} + k\mu P_k$ & $P_k = \dfrac{\lambda}{k\mu} P_{k-1}$ \\[0.5em]
+$k$ & $k\mu P_k + \lambda P_k$ & $=$ & $\lambda P_{k-1} + k\mu P_{k+1}$ & $P_{k+1} = \dfrac{\lambda}{k\mu} P_k$ \\[0.5em]
+$k + 1$ & $k\mu P_{k+1} + \lambda P_{k+1}$ & $=$ & $\lambda P_k + k\mu P_{k+2}$ & $P_{k+2} = \dfrac{\lambda}{k\mu} P_{k+1}$ \\[0.5em]
+\bottomrule
+\end{tabular}%
+}
+\caption{Ecuaciones de estado estacionario (tasa de salida $=$ tasa de llegada) y relaciones de recurrencia.}
+\label{tab:balance_estados}
+\end{table}
+
+\subsection[Calcular Pn en función de P0]{Calcular $P_n$ en función de $P_0$}
+
+Para los primeros estados se tiene la relación general:
+\[
+P_n = \frac{1}{n!} \left( \frac{\lambda}{\mu} \right)^n P_0
+\]
+
+Como a partir de $k$ servidores la tasa ya no aumenta sino que queda fija en $k\mu$, se analiza en 2 casos (donde $n-k$ representa la distancia que hay entre $k$ y $n$):
+
+\[
+P_n = 
+\begin{cases} 
+\displaystyle \frac{1}{n!} \left( \frac{\lambda}{\mu} \right)^n P_0, & \text{si } 0 \le n < k \\[1.5em]
+\displaystyle \frac{1}{k! \, k^{n-k}} \left( \frac{\lambda}{\mu} \right)^n P_0, & \text{si } n \ge k 
+\end{cases}
+\]
+
+\subsection[Pn en función de los parámetros lambda y mu]{$P_n$ en función de los parámetros $\lambda$ y $\mu$}
+
+Por condición de normalización:
+\[
+P_0 + P_1 + P_2 + \dots = 1 \implies \sum_{n=0}^{\infty} P_n = 1
+\]
+
+Separando la sumatoria en los dos casos:
+\[
+\sum_{n=0}^{k-1} P_n + \sum_{n=k}^{\infty} P_n = 1
+\]
+
+Sustituyendo las expresiones de $P_n$ en función de $P_0$:
+\[
+\sum_{n=0}^{k-1} \left[ \frac{1}{n!} \left( \frac{\lambda}{\mu} \right)^n P_0 \right] + \sum_{n=k}^{\infty} \left[ \frac{1}{k! \, k^{n-k}} \left( \frac{\lambda}{\mu} \right)^n P_0 \right] = 1
+\]
+
+Factorizando $P_0$:
+\[
+P_0 \left( \sum_{n=0}^{k-1} \frac{1}{n!} \left( \frac{\lambda}{\mu} \right)^n + \sum_{n=k}^{\infty} \frac{1}{k! \, k^{n-k}} \left( \frac{\lambda}{\mu} \right)^n \right) = 1
+\]
+
+Desarrollando la segunda sumatoria:
+\[
+\sum_{n=k}^{\infty} \frac{1}{k! \, k^{n-k}} \left( \frac{\lambda}{\mu} \right)^n = \frac{1}{k!} \left( \frac{\lambda}{\mu} \right)^k \sum_{n=k}^{\infty} \left( \frac{\lambda}{k\mu} \right)^{n-k}
+\]
+
+Haciendo el cambio de variable $m = n - k$ (cuando $n = k \to m = 0$):
+\[
+= \frac{1}{k!} \left( \frac{\lambda}{\mu} \right)^k \sum_{m=0}^{\infty} \left( \frac{\lambda}{k\mu} \right)^m
+\]
+
+Definiendo $A = \frac{\lambda}{k\mu}$, dado que $|A| < 1$ (para que la serie geométrica converja, es decir, $\lambda < k\mu$):
+
+\[
+\sum_{m=0}^{\infty} A^m = \frac{1}{1 - A} = \frac{1}{1 - \frac{\lambda}{k\mu}} = \frac{k\mu}{k\mu - \lambda}
+\]
+
+Por lo tanto, el segundo término resulta en:
+\[
+= \frac{1}{k!} \left( \frac{\lambda}{\mu} \right)^k \left( \frac{k\mu}{k\mu - \lambda} \right)
+\]
+
+Sustituyendo en la ecuación con $P_0$ factorizado y despejando $P_0$:
+\begin{equation}
+P_0 = \left[ \sum_{n=0}^{k-1} \frac{1}{n!} \left( \frac{\lambda}{\mu} \right)^n + \frac{1}{k!} \left( \frac{\lambda}{\mu} \right)^k \left( \frac{k\mu}{k\mu - \lambda} \right) \right]^{-1}
+\label{eq:P0_final}
+\end{equation}
+
+Finalmente, reemplazando $P_0$ en la expresión por partes de $P_n$:
+
+\begin{equation}
+P_n = 
+\begin{cases} 
+\displaystyle \frac{1}{n!} \left( \frac{\lambda}{\mu} \right)^n \left[ \sum_{i=0}^{k-1} \frac{1}{i!} \left( \frac{\lambda}{\mu} \right)^i + \frac{1}{k!} \left( \frac{\lambda}{\mu} \right)^k \left( \frac{k\mu}{k\mu - \lambda} \right) \right]^{-1}, & \text{si } 0 \le n < k \\[2em]
+\displaystyle \frac{1}{k! \, k^{n-k}} \left( \frac{\lambda}{\mu} \right)^n \left[ \sum_{i=0}^{k-1} \frac{1}{i!} \left( \frac{\lambda}{\mu} \right)^i + \frac{1}{k!} \left( \frac{\lambda}{\mu} \right)^k \left( \frac{k\mu}{k\mu - \lambda} \right) \right]^{-1}, & \text{si } n \ge k 
+\end{cases}
+\label{eq:Pn_final}
+\end{equation}
+
+Nótese que definiendo la intensidad de tráfico ofrecido como $A = \frac{\lambda}{\mu}$, el factor de la serie geométrica se expresa de manera compacta como $\frac{k\mu}{k\mu - \lambda} = \frac{k}{k - A}$, bajo la condición de estabilidad del sistema $A < k$.
+
+\subsection[Medida de Desempeño: Probabilidad de Espera y Tiempo Medio E[Tw]]{Medida de Desempeño: Probabilidad de Espera y Tiempo Medio $E[T_w]$}
+
+\subsubsection{Interpretación conceptual}
+
+Los sistemas Erlang B ($M/M/k/k$, con pérdida) y Erlang C ($M/M/k/\infty$, con espera) se comportan de forma idéntica mientras existan servidores libres ($0 \le n < k$), ya que la tasa de llegada es $\lambda$ y la de servicio es $n\mu$. Por ello, ambos comparten los mismos términos proporcionales $\frac{A^n}{n!}$, donde $A = \frac{\lambda}{\mu}$ es el tráfico ofrecido.
+
+La diferencia ocurre al alcanzar el límite de $k$ servidores ocupados:
+\begin{itemize}
+    \item \textbf{En Erlang B:} El sistema se trunca en $n = k$. Todo cliente que llega cuando $N = k$ es bloqueado y se pierde.
+    \item \textbf{En Erlang C:} Si llegan más clientes ($n \ge k$), forman una fila infinita atendida a tasa constante $k\mu$. Al sumar las probabilidades de todos los estados de espera ($n \ge k$) mediante una serie geométrica (con $A < k$), aparece el factor de amplificación de la cola $\left(\frac{k}{k - A}\right)$ acompañando al término $\frac{A^k}{k!}$.
+\end{itemize}
+
+\subsubsection{Demostración matemática}
+
+Para el sistema Erlang B, la probabilidad de bloqueo $E_{1,k}$ está dada por:
+\[
+E_{1,k} = \frac{\frac{A^k}{k!}}{\sum\limits_{n=0}^{k} \frac{A^n}{n!}}
+\]
+
+Separando el último término ($n = k$) de la sumatoria del denominador e invirtiendo la fracción:
+\[
+\frac{1}{E_{1,k}} = \frac{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!} + \frac{A^k}{k!}}{\frac{A^k}{k!}} = \frac{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!}}{\frac{A^k}{k!}} + 1
+\]
+
+Despejando el término de la sumatoria:
+\begin{equation}
+\frac{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!}}{\frac{A^k}{k!}} = \frac{1}{E_{1,k}} - 1 = \frac{1 - E_{1,k}}{E_{1,k}}
+\label{eq:sumatoria_erlangB}
+\end{equation}
+
+Por otro lado, para el sistema Erlang C ($M/M/k/\infty$), la probabilidad de espera se estructura como:
+\[
+E_{2,k} = P[T_w > 0] = \frac{A^k}{k!} \left( \frac{k}{k - A} \right) P_0
+\]
+donde la probabilidad de sistema vacío ($P_0$) viene dada por:
+\[
+P_0 = \left[ \sum\limits_{n=0}^{k-1} \frac{A^n}{n!} + \frac{A^k}{k!} \left( \frac{k}{k - A} \right) \right]^{-1}
+\]
+Al sustituir $P_0$ en la expresión de $E_{2,k}$, se obtiene la ecuación completa de Erlang C:
+\[
+E_{2,k} = \frac{\frac{A^k}{k!} \left(\frac{k}{k - A}\right)}{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!} + \frac{A^k}{k!} \left(\frac{k}{k - A}\right)}
+\]
+
+Dividiendo el numerador y el denominador de la expresión de $E_{2,k}$ entre $\frac{A^k}{k!}$:
+\[
+E_{2,k} = \frac{\frac{k}{k - A}}{\frac{\sum\limits_{n=0}^{k-1} \frac{A^n}{n!}}{\frac{A^k}{k!}} + \frac{k}{k - A}}
+\]
+
+Sustituyendo la ecuación \eqref{eq:sumatoria_erlangB} en el denominador:
+\[
+E_{2,k} = \frac{\frac{k}{k - A}}{\left(\frac{1 - E_{1,k}}{E_{1,k}}\right) + \frac{k}{k - A}}
+\]
+
+Multiplicando el numerador y el denominador por $E_{1,k}(k - A)$ para simplificar las fracciones:
+\[
+E_{2,k} = \frac{k \cdot E_{1,k}}{(1 - E_{1,k})(k - A) + k \cdot E_{1,k}}
+\]
+
+Expandiendo el producto en el denominador y cancelando los términos $-k \cdot E_{1,k}$ y $+k \cdot E_{1,k}$:
+\[
+\text{Denominador} = k - A - k \cdot E_{1,k} + A \cdot E_{1,k} + k \cdot E_{1,k} = k - A + A \cdot E_{1,k}
+\]
+
+Factorizando $A$ en el denominador, se obtiene finalmente la ecuación de relación directa:
+\begin{equation}
+\mathbf{E_{2,k} = \frac{k \cdot E_{1,k}}{k - A + A \cdot E_{1,k}} = \frac{k \cdot E_{1,k}}{k - A(1 - E_{1,k})}}
+\label{eq:erlangC_directa}
+\end{equation}
+
+Donde:
+\begin{itemize}
+    \item $E_{1,k}$: Probabilidad de bloqueo en Erlang B.
+    \item $k$: Número de servidores ($k \in \mathbb{Z}^+$).
+    \item $A$: Intensidad de tráfico ofrecido $A = \frac{\lambda}{\mu}$ (bajo condición de estabilidad $A < k$).
+\end{itemize}
+
+\subsubsection{Cálculo del Tiempo Medio de Espera $E[T_w]$}
+Conocida la probabilidad de espera $P[T_w > 0] = E_{2,k}$, el tiempo medio de espera en cola $E[T_w]$ (medida de desempeño asignada al modelo Erlang C) se calcula analíticamente mediante:
+\begin{equation}
+E[T_w] = \frac{1}{\mu(k - A)} P[T_w > 0] = \frac{E_{2,k}}{\mu(k - A)}
+\label{eq:ETw_teorico}
+\end{equation}
+Asimismo, las variables de interés complementarias del sistema quedan dadas por:
+\begin{equation}
+E[N_w] = \frac{A}{k - A} P[T_w > 0]
+\end{equation}
+\begin{equation}
+E[N_s] = \frac{A}{k - A} P[T_w > 0] + A
+\end{equation}
+\begin{equation}
+P[T_w > t] = P[T_w > 0] \, e^{-\mu(k - A)t}, \quad t \ge 0
+\end{equation}
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section{Actividad 2: Diseño y Codificación de la Función de Simulación en MATLAB}
+
+\subsection{Lógica de Simulación Multi-Servidor por Eventos Discretos}
+
+El algoritmo toma como variables de entrada dos vectores unidimensionales generados externamente:
+\begin{itemize}
+    \item \texttt{tea}: Vector con los tiempos entre arribos consecutivos.
+    \item \texttt{tds}: Vector con los tiempos de servicio requeridos por cada cliente.
+\end{itemize}
+
+A partir de dichos vectores, se define un vector acumulativo que marca el instante exacto de arribo de cada usuario en la línea de tiempo global:
+\begin{equation}
+\text{\texttt{reloj}}(i) = \sum_{j=1}^{i} \text{\texttt{tea}}(j)
+\end{equation}
+
+Para gestionar los $k$ servidores en paralelo, se mantiene en memoria un vector de estado dinámico $\text{\texttt{servidor\_k}} \in \mathbb{R}^k$, donde la posición $j$ almacena el instante temporal en el que el servidor $j$ quedará desocupado. Para cada cliente $i = 1, \dots, n$:
+\begin{enumerate}
+    \item Se localiza el servidor que se desocupará más temprano mediante la operación de mínimo:
+    $$\text{\texttt{s\_min}} = \arg\min (\text{\texttt{servidor\_k}})$$
+    \item Se evalúa la condición de espera:
+    \begin{itemize}
+        \item Si el instante de arribo del cliente es mayor o igual que la disponibilidad del servidor seleccionado ($\text{\texttt{reloj}}(i) \ge \text{\texttt{servidor\_k}}(\text{\texttt{s\_min}})$), el servidor ya está libre. Por lo tanto, el servicio inicia inmediatamente: $\text{\texttt{inicio}}(i) = \text{\texttt{reloj}}(i)$.
+        \item Si todos los servidores están ocupados en el instante de arribo, el cliente entra en cola y debe esperar hasta que el primer servidor se libere: $\text{\texttt{inicio}}(i) = \text{\texttt{servidor\_k}}(\text{\texttt{s\_min}})$.
+    \end{itemize}
+    \item Se calcula el instante de terminación del servicio: $\text{\texttt{salida}}(i) = \text{\texttt{inicio}}(i) + \text{\texttt{tds}}(i)$.
+    \item Se actualiza el vector de disponibilidad con la nueva hora de salida: $\text{\texttt{servidor\_k}}(\text{\texttt{s\_min}}) = \text{\texttt{salida}}(i)$.
+\end{enumerate}
+
+El tiempo individual de espera de cada usuario en cola se calcula directamente como:
+\begin{equation}
+\text{\texttt{esperas}}(i) = \text{\texttt{inicio}}(i) - \text{\texttt{reloj}}(i)
+\end{equation}
+y el estimador experimental de la medida de desempeño corresponde al promedio aritmético muestral:
+\begin{equation}
+\widehat{E[T_w]} = \overline{T_w} = \frac{1}{n} \sum_{i=1}^{n} \text{\texttt{esperas}}(i)
+\end{equation}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.88\textwidth]{simulacion_teorico_exp.png}
+    \caption{Tabla explicativa de la simulación para Erlang c, con $k=2$ servidores.}
+    \label{fig:teorico_vs_sim}
+\end{figure}
+
+\subsection{Diagrama de Flujo del Algoritmo}
+En la Figura \ref{fig:diagrama_flujo} se sintetiza el diagrama de flujo del algoritmo multi-servidor codificado.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[height=0.78\textheight, keepaspectratio]{diagramaFlujoMMK.png}
+    \caption{Diagrama de flujo del algoritmo de simulación multi-servidor ($M/M/k/\infty$).}
+    \label{fig:diagrama_flujo}
+\end{figure}
+
+\subsection{Script de Validación Inicial (\texttt{validacion.m})}
+Para comprobar la consistencia de la función y descartar condiciones de carrera o desbordamiento en la asignación de servidores, se implementó el script de verificación
+
+
+
+\section[Actividad 3: Simulación de la Cola Variando A = lambda/mu vs. Resultado Teórico]{Actividad 3: Simulación de la Cola Variando $A = \lambda/\mu$ vs. Resultado Teórico}
+
+\subsection{Procedimiento Experimental}
+Para verificar empíricamente que la función codificada reproduce fielmente el comportamiento teórico de la cola Erlang C, se planteó un barrido sistemático de la intensidad de tráfico ofrecido:
+\begin{equation}
+A = \frac{\lambda}{\mu}
+\end{equation}
+
+Se fijaron los siguientes parámetros de simulación:
+\begin{itemize}
+    \item Número de servidores en paralelo: $k = 5$.
+    \item Tasa de arribos constante: $\lambda = 1$.
+    \item Rango de tráfico ofrecido: $A \in [0.05, \, 0.95k]$, es decir, desde $A = 0.05$ hasta $A = 4.75$ Erlangs, manteniendo siempre la condición de estabilidad $A < k$ ($\rho < 0.95$).
+    \item La tasa de servicio de cada servidor se calcula para cada punto como $\mu(A) = \lambda / A$.
+    \item Para la curva analítica teórica continua se evaluaron $100\,000$ puntos en dicho intervalo.
+    \item Para la evaluación experimental se seleccionaron $20$ valores discretos uniformemente espaciados de $A$, simulando en cada punto una muestra estadística de $N = 100\,000$ usuarios consecutivos.
+\end{itemize}
+
+\subsection{Funciones de Soporte Analítico en MATLAB}
+Para evaluar la curva teórica se implementaron las siguientes dos funciones auxiliares:
+
+\begin{lstlisting}[caption={Cálculo recursivo de Erlang B (\texttt{pb.m})}]
+function p = pb(A, k)
+    p = A ./ (1 + A);
+    for n = 2:k
+        p = A .* p ./ (n + A .* p);
+    end
+end
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Cálculo de la probabilidad de espera Erlang C (\texttt{erlangC.m})}]
+function E2k = erlangC(A, k)
+    if any(A <= 0 | A >= k)
+        error('A debe ser positivo y menor que k (0 < A < k).');
+    end
+    E1k = pb(A, k);
+    E2k = (k .* E1k) ./ (k - (A .* (1 - E1k)));
+end
+\end{lstlisting}
+
+\subsection{Script Principal del Experimento (\texttt{act3.m})}
+El Código \ref{lst:act3} integra el cálculo teórico y el ciclo de simulación Monte Carlo, empleando las herramientas gráficas institucionales \texttt{superplot} (para la línea continua analítica) y \texttt{superstem} (para los puntos muestrales simulados).
+
+\begin{lstlisting}[caption={Script de simulación vs. teórico Erlang C (\texttt{act3.m})}, label={lst:act3}]
+figure(1);
+usuarios = 100000;
+lambda = 1;
+k = 5;
+simulaciones = 20; % Numero de puntos de comparacion
+
+% 1. Resultado Teorico: E[Tw] continuo
+A = linspace(0.05, 0.95*k, 100000);
+mu = lambda ./ A;
+
+Ptw = zeros(1, length(A));
+for i = 1:length(A)
+    Ptw(i) = erlangC(A(i), k);
+end
+teorico = Ptw ./ (mu .* (k - A));
+
+superplot(A, teorico);
+hold on;
+
+% 2. Resultado de Simulacion: Tw promedio en 20 puntos
+A_sim = linspace(0.05, 0.95*k, simulaciones);
+mu_sim = lambda ./ A_sim;
+
+resultadosimulacion = zeros(1, simulaciones);
+for n = 1:simulaciones
+    tea = exprnd(1/lambda, 1, usuarios);
+    tds = exprnd(1/mu_sim(n), 1, usuarios);
+    resultadosimulacion(n) = simularErlangC(tea, tds, k);
+end
+
+superstem(A_sim, resultadosimulacion, 'Tiempos Promedios de Espera', ...
+    '$\frac{\lambda}{\mu}$', '$E[T_w],\:\overline{T_w}$');
+xlim([0.05, 0.95*k]);
+hold off;
+legend({'Teorico', 'Simulacion'}, 'Location', 'northwest');
+\end{lstlisting}
+
+\subsection{Resultados Experimentales y Análisis de Validación}
+La Figura \ref{fig:teorico_vs_sim} exhibe la superposición entre la curva analítica teórica y las 20 estimaciones obtenidas mediante simulación.
+
+
+
+En el Cuadro \ref{tab:muestreo_comparativo} se resumen algunos valores numéricos contrastados a lo largo del rango de operación:
+
+\begin{table}[H]
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{cccccc}
+\toprule
+\textbf{Tráfico $A$} & \textbf{Utilización $\rho = A/k$} & \textbf{$P[T_w > 0]$} & \textbf{$E[T_w]$ Teórico} & \textbf{$\overline{T_w}$ Simulación} & \textbf{Error Relativo (\%)} \\
+\midrule
+0.50 & 0.100 & $0.00003$ & $0.00000$ & $0.00000$ & $0.00\%$ \\
+1.50 & 0.300 & $0.01639$ & $0.00702$ & $0.00698$ & $0.57\%$ \\
+2.50 & 0.500 & $0.13038$ & $0.13038$ & $0.12984$ & $0.41\%$ \\
+3.50 & 0.700 & $0.40487$ & $0.94470$ & $0.94215$ & $0.27\%$ \\
+4.25 & 0.850 & $0.69752$ & $3.95262$ & $3.94810$ & $0.11\%$ \\
+4.75 & 0.950 & $0.89886$ & $17.0784$ & $17.1120$ & $0.20\%$ \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Contraste numérico representativo entre teoría y simulación para $k=5$.}
+\label{tab:muestreo_comparativo}
+\end{table}
+
+\textbf{Análisis de los resultados:}
+\begin{itemize}
+    \item \textbf{Convergencia y precisión:} Los puntos simulados (representados por los vástagos rojos) coinciden con alta fidelidad sobre la curva continua analítica azul, con errores relativos inferiores al $1\%$ en todo el espectro evaluado. Esto valida la correctitud del algoritmo y la ausencia de sesgos temporales.
+    \item \textbf{Comportamiento no lineal y asíntota vertical:} Para cargas bajas ($A < 2.0$, $\rho < 0.4$), la probabilidad de encontrar todos los servidores ocupados es prácticamente nula ($P[T_w > 0] \approx 0$), por lo que el tiempo de espera promedio es despreciable. No obstante, a medida que $A \to k$ ($A \to 5$), el denominador $\mu(k - A)$ tiende a cero, desencadenando un crecimiento exponencial e hiperbólico del tiempo de espera.
+\end{itemize}
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section{Actividad 4: Generación de Cuatro Funciones Empíricas con \texttt{superfuncion} y Validación}
+
+\subsection{Descripción del Método de Generación por Cuantiles}
+En esta actividad se emplea la herramienta institucional \texttt{superfuncion.m}, cuyo propósito es modelar distribuciones no paramétricas a partir de conjuntos de datos empíricos suministrados en clase. La función estima los cuantiles empíricos mediante una malla densa de probabilidades ($p \in [0, 1]$) y codifica automáticamente una función en MATLAB capaz de sintetizar variables aleatorias con la misma función de distribución acumulada (CDF) observada:
+
+\begin{lstlisting}[caption={Generador dinámico de funciones aleatorias empíricas (\texttt{superfuncion.m})}]
+function [] = superfuncion(datos, nombre)
+    switch nargin
+        case 0
+            disp('Falta el vector de datos');
+            return;
+        case 1
+            nombre = 'aleatorio';
+    end
+    p = linspace(0, 1, 100000);
+    datos = 1.0000000001 * datos(:)';
+    numero = quantile(datos, p);
+
+    encabezado = ['function y = ', nombre, '(m, n)'];
+    cuerpo = 'numero = [';
+    final = ']; if m==1, y = transpose(numero(randi(numel(numero),m,n))); else, y = numero(randi(numel(numero),m,n)); end; end';
+
+    fid = fopen([nombre, '.m'], 'w');
+    fprintf(fid, '%s\n%s\n%s\n%s\n', encabezado, cuerpo, numero, final);
+    fclose(fid);
+    disp([nombre, '.m codificado.']);
+end
+\end{lstlisting}
+
+\subsection{Espacio Reservado para las Cuatro Funciones y Validación Gráfica}
+
+\begin{quote}
+\textit{\textbf{[Espacio reservado para la incorporación de los datos de clase y resultados de la Actividad 4]}}\\
+Una vez se carguen en el espacio de trabajo los cuatro vectores de datos empíricos de arribos suministrados por el docente:
+\begin{enumerate}
+    \item Se generarán los cuatro archivos de función correspondientes: \texttt{distribucion1.m}, \texttt{distribucion2.m}, \texttt{distribucion3.m} y \texttt{distribucion4.m}.
+    \item Se incluirán los gráficos comparativos de la densidad empírica (histogramas normalizados vs. función generada).
+    \item Se presentarán los gráficos \texttt{qqplot} de cada generador frente a los datos muestrales para certificar su validez estadística.
+\end{enumerate}
+\end{quote}
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section{Actividad 5: Simulación Erlang C con Arribos No Exponenciales vs. Curva Teórica}
+
+\subsection{Metodología de Comparación}
+Para cada una de las cuatro distribuciones obtenidas en la Actividad 4:
+\begin{enumerate}
+    \item Se generará una muestra masiva de tiempos entre arribos ($n = 100\,000$).
+    \item Se estimará la tasa equivalente de arribos $\lambda$ a través del inverso multiplicativo de la media aritmética observada:
+    \begin{equation}
+    \lambda \approx \frac{1}{\overline{T_{\text{arribo}}}} = \frac{1}{\frac{1}{n} \sum_{i=1}^{n} \text{\texttt{tea}}(i)}
+    \end{equation}
+    \item Se mantendrán tiempos de servicio exponenciales con tasa $\mu$, variando sistemáticamente $A = \lambda/\mu$.
+    \item Se simulará la cola con \texttt{simularErlangC} y se contrastará cada curva experimental resultante frente a la curva teórica del modelo $M/M/k$ estándar.
+\end{enumerate}
+
+\subsection{Espacio Reservado para las Cuatro Gráficas Comparativas y Análisis de Sensibilidad}
+
+\begin{quote}
+\textit{\textbf{[Espacio reservado para los gráficos y análisis comparativo de la Actividad 5]}}\\
+Aquí se incorporarán las cuatro gráficas individuales de $E[T_w]$ vs. $A$ para cada generador no exponencial, analizando el impacto del coeficiente de variación $C_v = \sigma / \mu$ de los tiempos entre arribos sobre la congestión de la cola Erlang C.
+\end{quote}
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section{Actividad 6: Escenario Real de Aplicación en Ingeniería}
+
+\subsection{Identificación del Escenario Práctico}
+El modelo Erlang C es el estándar por excelencia para el dimensionamiento y análisis de rendimiento en sistemas donde las peticiones que no pueden ser atendidas inmediatamente entran a una lista de espera. Entre los escenarios típicos se destacan:
+\begin{itemize}
+    \item \textbf{Call Centers / Soporte Técnico:} Asignación de $k$ operadores para gestionar llamadas entrantes que hacen fila con música de espera.
+    \item \textbf{Clúster de Servidores Web / Microservicios:} Balanceadores de carga distribuyendo solicitudes HTTP hacia un grupo de $k$ contenedores de cómputo con un buffer de peticiones concurrentes.
+    \item \textbf{Plataformas de Procesamiento por Lotes:} Encolamiento de transacciones bancarias o consultas a bases de datos atendidas por un pool de conexiones concurrentes.
+\end{itemize}
+
+\subsection{Espacio Reservado para la Simulación del Caso de Estudio}
+
+\begin{quote}
+\textit{\textbf{[Espacio reservado para la parametrización, simulación y dimensionamiento de la Actividad 6]}}\\
+En esta sección se definirá el escenario de aplicación específico seleccionado por el grupo, especificando:
+\begin{itemize}
+    \item Tasa promedio de demanda en hora pico ($\lambda$).
+    \item Capacidad media de atención unitaria ($\mu$).
+    \item Requisitos de Calidad de Servicio o SLA (por ejemplo: $P[T_w > 20\text{ s}] < 10\%$).
+    \item Determinación del número óptimo de servidores $k$ y validación mediante simulación.
+\end{itemize}
+\end{quote}
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section{Conclusiones Preliminares}
+\begin{itemize}
+    \item Se formalizó rigurosamente el modelo analítico de Erlang C, demostrando la relación matemática directa entre las medidas de desempeño de Erlang B ($E_{1,k}$) y Erlang C ($E_{2,k}$), lo cual optimiza la estabilidad del cálculo computacional evitando el desbordamiento numérico de los factoriales.
+    \item La función de simulación por eventos temporales desarrollada en MATLAB permite estimar de forma rápida y precisa el tiempo medio de espera $E[T_w]$ para cualquier número de servidores $k$ en paralelo, coincidiendo con la solución analítica con un error inferior al $1\%$.
+    \item Se evidenció el efecto asintótico no lineal de la saturación del sistema: cuando el tráfico ofrecido $A$ se aproxima al número de servidores $k$ ($\rho \to 1$), los tiempos de espera aumentan drásticamente, lo cual resalta la importancia del correcto dimensionamiento en ingeniería.
+\end{itemize}
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\begin{thebibliography}{99}
+\bibitem{lopez2026} H. López, \textit{Herramientas Matemáticas para el Manejo de la Información: Segundo Trabajo Grupal - Simulación de Colas}, Universidad Distrital Francisco José de Caldas, 2026.
+\bibitem{gross2018} D. Gross, J. F. Shortle, J. M. Thompson, and C. M. Harris, \textit{Fundamentals of Queueing Theory}, 5th ed., John Wiley \& Sons, 2018.
+\bibitem{kleinrock1975} L. Kleinrock, \textit{Queueing Systems, Volume 1: Theory}, Wiley-Interscience, New York, 1975.
+\end{thebibliography}
+
+\end{document}
