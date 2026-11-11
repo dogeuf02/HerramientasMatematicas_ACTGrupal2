@@ -359,125 +359,119 @@ En la Figura \ref{fig:diagrama_flujo} se sintetiza el diagrama de flujo del algo
     \label{fig:diagrama_flujo}
 \end{figure}
 
-\subsection{Script de Validación Inicial (\texttt{validacion.m})}
-Para comprobar la consistencia de la función y descartar condiciones de carrera o desbordamiento en la asignación de servidores, se implementó el script de verificación
 
 
 
 \section[Actividad 3: Simulación de la Cola Variando A = lambda/mu vs. Resultado Teórico]{Actividad 3: Simulación de la Cola Variando $A = \lambda/\mu$ vs. Resultado Teórico}
 
-\subsection{Procedimiento Experimental}
-Para verificar empíricamente que la función codificada reproduce fielmente el comportamiento teórico de la cola Erlang C, se planteó un barrido sistemático de la intensidad de tráfico ofrecido:
-\begin{equation}
-A = \frac{\lambda}{\mu}
-\end{equation}
+\subsection{Configuración experimental}
+Para verificar que el algoritmo de simulación por eventos reproduce la solución matemática del sistema Erlang C ($M/M/k/\infty$), se contrastaron los valores analíticos teóricos frente a las estimaciones estadísticas de la simulación.
 
-Se fijaron los siguientes parámetros de simulación:
+El experimento se configuró con los siguientes parámetros:
 \begin{itemize}
-    \item Número de servidores en paralelo: $k = 5$.
-    \item Tasa de arribos constante: $\lambda = 1$.
-    \item Rango de tráfico ofrecido: $A \in [0.05, \, 0.95k]$, es decir, desde $A = 0.05$ hasta $A = 4.75$ Erlangs, manteniendo siempre la condición de estabilidad $A < k$ ($\rho < 0.95$).
-    \item La tasa de servicio de cada servidor se calcula para cada punto como $\mu(A) = \lambda / A$.
-    \item Para la curva analítica teórica continua se evaluaron $100\,000$ puntos en dicho intervalo.
-    \item Para la evaluación experimental se seleccionaron $20$ valores discretos uniformemente espaciados de $A$, simulando en cada punto una muestra estadística de $N = 100\,000$ usuarios consecutivos.
+    \item Servidores en paralelo: $k = 3$.
+    \item Tasa media de llegadas: $\lambda = 1$.
+    \item Rango de tráfico ofrecido: $A = \frac{\lambda}{\mu} \in [0.05, \, 0.95k] = [0.05, \, 2.85]$, ajustando en cada punto la tasa de servicio de las cabinas según $\mu = \lambda / A$.
+    \item Curva teórica continua: se evaluó la ecuación analítica del tiempo medio de espera:
+    \begin{equation}
+    E[T_w] = \frac{P[T_w > 0]}{\mu(k - A)} = \frac{E_{2,k}(A)}{\mu(k - A)}
+    \end{equation}
+    sobre una discretización de $10\,000$ puntos mediante las funciones auxiliares \texttt{erlangC.m} y \texttt{pb.m}.
+    \item Simulación discreta: se evaluaron 20 puntos de prueba distribuidos de forma uniforme a lo largo del intervalo de $A$. En cada punto se generaron las entradas estocásticas mediante distribuciones exponenciales independientes:
+
+    \item Variación del tamaño de muestra: para analizar la convergencia y la dispersión muestral, el experimento se ejecutó sobre cinco órdenes de magnitud en el tamaño de muestra:
+    \[
+    N \in \{1\,000, \; 10\,000, \; 100\,000, \; 1\,000\,000, \; 10\,000\,000\} \text{ usuarios}
+    \]
 \end{itemize}
 
-\subsection{Funciones de Soporte Analítico en MATLAB}
-Para evaluar la curva teórica se implementaron las siguientes dos funciones auxiliares:
 
-\begin{lstlisting}[caption={Cálculo recursivo de Erlang B (\texttt{pb.m})}]
-function p = pb(A, k)
-    p = A ./ (1 + A);
-    for n = 2:k
-        p = A .* p ./ (n + A .* p);
-    end
-end
-\end{lstlisting}
+\subsection{Resultados cuantitativos de convergencia}
+Para medir la diferencia entre los promedios simulados $\overline{T_w}$ y los valores teóricos $E[T_w]$ sobre los 20 puntos evaluados, se calculó la raíz del error cuadrático medio (RMSE):
+\begin{equation}
+\text{RMSE} = \sqrt{\frac{1}{20} \sum_{n=1}^{20} \left(\overline{T_w}(n) - E[T_w](n)\right)^2}
+\end{equation}
 
-\begin{lstlisting}[caption={Cálculo de la probabilidad de espera Erlang C (\texttt{erlangC.m})}]
-function E2k = erlangC(A, k)
-    if any(A <= 0 | A >= k)
-        error('A debe ser positivo y menor que k (0 < A < k).');
-    end
-    E1k = pb(A, k);
-    E2k = (k .* E1k) ./ (k - (A .* (1 - E1k)));
-end
-\end{lstlisting}
-
-\subsection{Script Principal del Experimento (\texttt{act3.m})}
-El Código \ref{lst:act3} integra el cálculo teórico y el ciclo de simulación Monte Carlo, empleando las herramientas gráficas institucionales \texttt{superplot} (para la línea continua analítica) y \texttt{superstem} (para los puntos muestrales simulados).
-
-\begin{lstlisting}[caption={Script de simulación vs. teórico Erlang C (\texttt{act3.m})}, label={lst:act3}]
-figure(1);
-usuarios = 100000;
-lambda = 1;
-k = 5;
-simulaciones = 20; % Numero de puntos de comparacion
-
-% 1. Resultado Teorico: E[Tw] continuo
-A = linspace(0.05, 0.95*k, 100000);
-mu = lambda ./ A;
-
-Ptw = zeros(1, length(A));
-for i = 1:length(A)
-    Ptw(i) = erlangC(A(i), k);
-end
-teorico = Ptw ./ (mu .* (k - A));
-
-superplot(A, teorico);
-hold on;
-
-% 2. Resultado de Simulacion: Tw promedio en 20 puntos
-A_sim = linspace(0.05, 0.95*k, simulaciones);
-mu_sim = lambda ./ A_sim;
-
-resultadosimulacion = zeros(1, simulaciones);
-for n = 1:simulaciones
-    tea = exprnd(1/lambda, 1, usuarios);
-    tds = exprnd(1/mu_sim(n), 1, usuarios);
-    resultadosimulacion(n) = simularErlangC(tea, tds, k);
-end
-
-superstem(A_sim, resultadosimulacion, 'Tiempos Promedios de Espera', ...
-    '$\frac{\lambda}{\mu}$', '$E[T_w],\:\overline{T_w}$');
-xlim([0.05, 0.95*k]);
-hold off;
-legend({'Teorico', 'Simulacion'}, 'Location', 'northwest');
-\end{lstlisting}
-
-\subsection{Resultados Experimentales y Análisis de Validación}
-La Figura \ref{fig:teorico_vs_sim} exhibe la superposición entre la curva analítica teórica y las 20 estimaciones obtenidas mediante simulación.
-
-
-
-En el Cuadro \ref{tab:muestreo_comparativo} se resumen algunos valores numéricos contrastados a lo largo del rango de operación:
+El Cuadro \ref{tab:rmse_muestras} resume el error obtenido en cada una de las cinco corridas.
 
 \begin{table}[H]
 \centering
-\small
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{cccccc}
+\begin{tabular}{rcc}
 \toprule
-\textbf{Tráfico $A$} & \textbf{Utilización $\rho = A/k$} & \textbf{$P[T_w > 0]$} & \textbf{$E[T_w]$ Teórico} & \textbf{$\overline{T_w}$ Simulación} & \textbf{Error Relativo (\%)} \\
+\textbf{Muestra (usuarios)} & \textbf{RMSE} & \textbf{Diagnóstico de dispersión y régimen} \\
 \midrule
-0.50 & 0.100 & $0.00003$ & $0.00000$ & $0.00000$ & $0.00\%$ \\
-1.50 & 0.300 & $0.01639$ & $0.00702$ & $0.00698$ & $0.57\%$ \\
-2.50 & 0.500 & $0.13038$ & $0.13038$ & $0.12984$ & $0.41\%$ \\
-3.50 & 0.700 & $0.40487$ & $0.94470$ & $0.94215$ & $0.27\%$ \\
-4.25 & 0.850 & $0.69752$ & $3.95262$ & $3.94810$ & $0.11\%$ \\
-4.75 & 0.950 & $0.89886$ & $17.0784$ & $17.1120$ & $0.20\%$ \\
+$1\,000$       & $1.64553$ & Dispersión alta por arranque en frío; subestimación en saturación \\
+$10\,000$      & $1.85854$ & Inestabilidad estocástica y fluctuaciones severas cerca de $A \to 2.85$ \\
+$100\,000$     & $0.85994$ & Mitigación del transitorio y seguimiento visible de la curvatura \\
+$1\,000\,000$   & $0.22524$ & Reducción marcada de la dispersión; vástagos centrados sobre la curva \\
+$10\,000\,000$  & $0.06509$ & Ajuste casi exacto a la teoría; régimen permanente consolidado \\
 \bottomrule
 \end{tabular}%
 }
-\caption{Contraste numérico representativo entre teoría y simulación para $k=5$.}
-\label{tab:muestreo_comparativo}
+\caption{Evolución del error cuadrático medio en función del tamaño de muestra para $k=3$.}
+\label{tab:rmse_muestras}
 \end{table}
 
-\textbf{Análisis de los resultados:}
-\begin{itemize}
-    \item \textbf{Convergencia y precisión:} Los puntos simulados (representados por los vástagos rojos) coinciden con alta fidelidad sobre la curva continua analítica azul, con errores relativos inferiores al $1\%$ en todo el espectro evaluado. Esto valida la correctitud del algoritmo y la ausencia de sesgos temporales.
-    \item \textbf{Comportamiento no lineal y asíntota vertical:} Para cargas bajas ($A < 2.0$, $\rho < 0.4$), la probabilidad de encontrar todos los servidores ocupados es prácticamente nula ($P[T_w > 0] \approx 0$), por lo que el tiempo de espera promedio es despreciable. No obstante, a medida que $A \to k$ ($A \to 5$), el denominador $\mu(k - A)$ tiende a cero, desencadenando un crecimiento exponencial e hiperbólico del tiempo de espera.
-\end{itemize}
+\subsection{Gráficas de simulación frente a la curva teórica}
+A continuación se presentan de forma individual las gráficas de dispersión de la simulación frente a la curva teórica analítica para cada uno de los cinco tamaños de muestra evaluados (Figuras \ref{fig:grafica_1k}, \ref{fig:grafica_10k}, \ref{fig:grafica_100k}, \ref{fig:grafica_1m} y \ref{fig:grafica_10m}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\textwidth]{Graficas/usuariomil.png}
+    \caption{Simulación discreta frente a la curva teórica para $N = 1\,000$ usuarios ($\text{RMSE} = 1.64553$).}
+    \label{fig:grafica_1k}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\textwidth]{Graficas/usuarioDiesmil.png}
+    \caption{Simulación discreta frente a la curva teórica para $N = 10\,000$ usuarios ($\text{RMSE} = 1.85854$).}
+    \label{fig:grafica_10k}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\textwidth]{Graficas/usuarioCienmil.png}
+    \caption{Simulación discreta frente a la curva teórica para $N = 100\,000$ usuarios ($\text{RMSE} = 0.85994$).}
+    \label{fig:grafica_100k}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\textwidth]{Graficas/usuarioUnmillon.png}
+    \caption{Simulación discreta frente a la curva teórica para $N = 1\,000\,000$ usuarios ($\text{RMSE} = 0.22524$).}
+    \label{fig:grafica_1m}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\textwidth]{Graficas/usuarioDiezmillones.png}
+    \caption{Simulación discreta frente a la curva teórica para $N = 10\,000\,000$ usuarios ($\text{RMSE} = 0.06509$).}
+    \label{fig:grafica_10m}
+\end{figure}
+
+\subsection{Análisis de dispersión y fenomenología de colas}
+La comparación de las cinco gráficas muestra dos regímenes de operación: uno dominado por la dispersión estocástica y los efectos de frontera (para $N \le 10^4$), y otro de estabilización estacionaria (para $N \ge 10^5$). Las causas de esta evolución en el error se detallan a continuación.
+
+\paragraph{Impacto del régimen transitorio y arranque en frío.}
+La solución analítica de Erlang C describe el régimen permanente del sistema, es decir, el comportamiento promedio tras operar durante un tiempo infinito ($t \to \infty$). En contraste, el código de simulación modela un sistema que inicia determinísticamente vacío en $t = 0$, pues el vector de servidores se inicializa en \texttt{servidor\_k = zeros(1, k)}.
+
+Por esta razón, los primeros usuarios encuentran los tres servidores disponibles y no experimentan espera alguna ($T_w = 0$). La cola requiere de varios cientos de llegadas para llenarse y alcanzar la congestión media representativa del régimen estacionario. En una simulación de apenas $1\,000$ eventos, este periodo inicial de calentamiento representa entre el 10\% y el 20\% de la muestra total, sesgando el promedio general hacia abajo y produciendo un RMSE de $1.64553$. Con $10\,000\,000$ de usuarios, el tiempo transitorio inicial dura exactamente lo mismo en tiempo absoluto, pero dentro de diez millones de clientes representa menos del 0.01\% de los datos. Su efecto queda diluido y permite que el promedio coincida con el valor analítico estacionario, reduciendo el RMSE a $0.06509$.
+
+\paragraph{Varianza y autocorrelación cerca de la saturación ($A \to 2.85$).}
+En las gráficas de $1\,000$ y $10\,000$ usuarios (Figuras \ref{fig:grafica_1k} y \ref{fig:grafica_10k}) se observa que, mientras para tráficos moderados ($A < 1.5$) los vástagos se aproximan a la curva, al acercarse a $A = 2.85$ (utilización $\rho = A/k = 0.95$) la dispersión crece notablemente, registrando puntos que sobreestiman a la teoría y otros que caen por debajo.
+
+Este comportamiento responde a dos propiedades de las colas bajo alta utilización:
+\begin{enumerate}
+    \item Pérdida de independencia: cerca del 95\% de capacidad, los tiempos de espera de clientes sucesivos dejan de ser independientes y pasan a estar fuertemente correlacionados.
+    \item Efecto de ráfaga estocástica: al tratarse de una única corrida aleatoria sin promediado de réplicas de Monte Carlo, si por azar entran usuarios consecutivos con tiempos de servicio prolongados, la cola se satura y los siguientes cientos de usuarios experimentan demoras elevadas. Si en cambio ocurre un intervalo breve sin llegadas, la cola se vacía y tarda un tiempo considerable en volver a llenarse.
+\end{enumerate}
+
+Como las discrepancias en los últimos puntos son de varias unidades de tiempo, al elevarse al cuadrado dentro del RMSE influyen de forma desproporcionada en la métrica global. Esto explica por qué la corrida de $10\,000$ usuarios registró un RMSE de $1.85854$, superior al de $1\,000$ usuarios ($1.64553$): una ráfaga atípica en la zona de alta carga distorsionó ese punto específico.
+
+\paragraph{Convergencia por la ley de los grandes números.}
+A medida que el tamaño muestral aumenta a $100\,000$, $1\,000\,000$ y $10\,000\,000$ de usuarios, las fluctuaciones aleatorias locales de llegada y servicio se compensan mutuamente a lo largo de la traza extendida. La varianza del promedio muestral se reduce y el RMSE desciende a $0.06509$ con diez millones de usuarios. En la gráfica de $10\,000\,000$ de usuarios (Figura \ref{fig:grafica_10m}), los vástagos de la simulación coinciden visual y cuantitativamente con la curva analítica en todo el intervalo de tráfico, confirmando la convergencia del algoritmo.
 
 \vspace{1em}
 \hrule
@@ -488,29 +482,7 @@ En el Cuadro \ref{tab:muestreo_comparativo} se resumen algunos valores numérico
 \subsection{Descripción del Método de Generación por Cuantiles}
 En esta actividad se emplea la herramienta institucional \texttt{superfuncion.m}, cuyo propósito es modelar distribuciones no paramétricas a partir de conjuntos de datos empíricos suministrados en clase. La función estima los cuantiles empíricos mediante una malla densa de probabilidades ($p \in [0, 1]$) y codifica automáticamente una función en MATLAB capaz de sintetizar variables aleatorias con la misma función de distribución acumulada (CDF) observada:
 
-\begin{lstlisting}[caption={Generador dinámico de funciones aleatorias empíricas (\texttt{superfuncion.m})}]
-function [] = superfuncion(datos, nombre)
-    switch nargin
-        case 0
-            disp('Falta el vector de datos');
-            return;
-        case 1
-            nombre = 'aleatorio';
-    end
-    p = linspace(0, 1, 100000);
-    datos = 1.0000000001 * datos(:)';
-    numero = quantile(datos, p);
 
-    encabezado = ['function y = ', nombre, '(m, n)'];
-    cuerpo = 'numero = [';
-    final = ']; if m==1, y = transpose(numero(randi(numel(numero),m,n))); else, y = numero(randi(numel(numero),m,n)); end; end';
-
-    fid = fopen([nombre, '.m'], 'w');
-    fprintf(fid, '%s\n%s\n%s\n%s\n', encabezado, cuerpo, numero, final);
-    fclose(fid);
-    disp([nombre, '.m codificado.']);
-end
-\end{lstlisting}
 
 \subsection{Espacio Reservado para las Cuatro Funciones y Validación Gráfica}
 
